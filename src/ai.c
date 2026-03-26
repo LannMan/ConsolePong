@@ -20,41 +20,81 @@ float ai_calc_difficulty(GameState *g) {
         if (g->last_10[i] == 0) player_wins++;
     }
 
+    float win_rate = (float)player_wins / (float)count;
     float diff = g->ai_difficulty;
-    if (player_wins > 6)       diff += 0.05f;  /* player winning too much */
-    else if (player_wins < 4)  diff -= 0.05f;  /* player losing too much */
+    if (win_rate > 0.6f)      diff += 0.05f;  /* player winning too much */
+    else if (win_rate < 0.4f) diff -= 0.05f;  /* player losing too much */
 
     if (diff < 0.1f) diff = 0.1f;
     if (diff > 1.0f) diff = 1.0f;
     return diff;
 }
 
+/* Predict where ball will be (in y) when it reaches x_target,
+   accounting for wall bounces. Returns predicted y. */
+static float predict_ball_y(const GameState *g, float x_target) {
+    if (g->ball.vx <= 0.0f) return g->ball.y; /* ball moving away, no prediction */
+
+    float travel_time = (x_target - g->ball.x) / g->ball.vx;
+    float py = g->ball.y + g->ball.vy * travel_time;
+
+    /* Reflect off top/bottom walls using the periodic reflection trick */
+    float top = 1.0f;
+    float bot = (float)(g->rows - 2);
+    float ht  = bot - top;
+    if (ht > 0.0f) {
+        py -= top;
+        float period = ht * 2.0f;
+        py = fmodf(fabsf(py), period);
+        if (py > ht) py = period - py;
+        py += top;
+    }
+    return py;
+}
+
 void ai_update(GameState *g, float dt) {
     if (!g->running || g->paused) return;
+    if (g->ai_frozen) return;
 
-    float ai_speed = AI_MIN_SPEED + g->ai_difficulty * (AI_MAX_SPEED - AI_MIN_SPEED);
+    float ai_speed = (AI_MIN_SPEED + g->ai_difficulty * (AI_MAX_SPEED - AI_MIN_SPEED))
+                     * g->time_warp_factor;
+    int ai_height = PADDLE_HEIGHT - (g->ai_paddle_shrunk ? 2 : 0);
+    float ai_x     = (float)(g->cols - 3);
 
-    /* Add reaction noise inversely proportional to difficulty */
-    float noise_range = (1.0f - g->ai_difficulty) * 4.0f;
-    float noise = ((float)(rand() % 1000) / 1000.0f - 0.5f) * noise_range;
-    float target_y = g->ball.y + noise - PADDLE_HEIGHT / 2.0f;
+    float aim_y;
+    if (g->ball.vx > 0.0f) {
+        /* Ball heading toward AI — blend between pure tracking and full prediction */
+        float tracked   = g->ball.y;
+        float predicted = predict_ball_y(g, ai_x);
+        aim_y = tracked + g->ai_difficulty * (predicted - tracked);
+    } else {
+        /* Ball heading away — drift back toward centre */
+        aim_y = (float)(g->rows / 2);
+    }
 
-    float paddle_y = (float)g->ai.y;
-    float dist = target_y - paddle_y;
-    float move  = ai_speed * dt;
+    /* Re-roll noise only when flagged (serve or paddle hit), not every frame */
+    if (g->ai_rethink) {
+        float noise_range = (1.0f - g->ai_difficulty) * 5.0f;
+        g->ai_noise = ((float)(rand() % 1000) / 1000.0f - 0.5f) * noise_range;
+        g->ai_rethink = 0;
+    }
+    float target_y = aim_y + g->ai_noise - ai_height / 2.0f;
+
+    float dist = target_y - g->ai_y_f;
+    float move = ai_speed * dt;
 
     if (fabsf(dist) < move) {
-        paddle_y = target_y;
-    } else if (dist > 0) {
-        paddle_y += move;
+        g->ai_y_f = target_y;
+    } else if (dist > 0.0f) {
+        g->ai_y_f += move;
     } else {
-        paddle_y -= move;
+        g->ai_y_f -= move;
     }
 
     /* Clamp to board */
-    if (paddle_y < 1.0f) paddle_y = 1.0f;
-    if (paddle_y + PADDLE_HEIGHT > g->rows - 2)
-        paddle_y = (float)(g->rows - 2 - PADDLE_HEIGHT);
+    if (g->ai_y_f < 1.0f) g->ai_y_f = 1.0f;
+    if (g->ai_y_f + ai_height > g->rows - 2)
+        g->ai_y_f = (float)(g->rows - 2 - ai_height);
 
-    g->ai.y = (int)paddle_y;
+    g->ai.y = (int)g->ai_y_f;
 }
