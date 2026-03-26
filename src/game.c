@@ -1,4 +1,5 @@
 #include "game.h"
+#include "powerup.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +23,7 @@ void game_init(GameState *g, int rows, int cols) {
     g->ai_y_f    = (float)g->ai.y;
     g->player_paddle_height = PADDLE_HEIGHT;
     ball_serve(g, 1);  /* serve toward player first */
+    powerup_init(g);
 }
 
 void ball_serve(GameState *g, int toward_player) {
@@ -53,7 +55,11 @@ static void handle_paddle_hit(GameState *g, Paddle *paddle, int paddle_x, int di
     float rel = (g->ball.y - paddle_mid) / (ph / 2.0f); /* -1..+1 */
     rel = clamp_f(rel, -1.0f, 1.0f);
 
-    float angle = rel * (3.14159f / 4.0f); /* max ±45° */
+    float max_angle = g->powerup.curve_pending
+                      ? (3.14159f * 5.0f / 12.0f)  /* 75° when curved */
+                      : (3.14159f / 4.0f);           /* 45° normal */
+    float angle = rel * max_angle;
+    if (g->powerup.curve_pending) g->powerup.curve_pending = 0;
 
     /* Speed up */
     g->ball.speed *= BALL_SPEED_INC;
@@ -69,14 +75,16 @@ static void handle_paddle_hit(GameState *g, Paddle *paddle, int paddle_x, int di
     g->rally_count++;
     if (g->rally_count >= 20) g->flag_rally_20 = 1;
     else if (g->rally_count >= 10) g->flag_rally_10 = 1;
+    if (dir > 0) powerup_on_player_hit(g);  /* dir>0 = player just hit */
 }
 
 void game_update(GameState *g, float dt) {
     if (!g->running || g->paused) return;
 
     /* Move ball */
-    g->ball.x += g->ball.vx * dt;
-    g->ball.y += g->ball.vy * dt;
+    float wdt = dt * g->time_warp_factor;
+    g->ball.x += g->ball.vx * wdt;
+    g->ball.y += g->ball.vy * wdt;
 
     /* Wall bounces (top row = 1, bottom row = rows-2, accounting for border) */
     float top_wall    = 1.0f;
@@ -109,13 +117,21 @@ void game_update(GameState *g, float dt) {
         handle_paddle_hit(g, &g->player, player_x, 1);
     }
 
-    /* AI paddle collision */
-    if (g->ball.vx > 0 &&
+    int effective_ai_height = PADDLE_HEIGHT - (g->ai_paddle_shrunk ? 2 : 0);
+
+    /* AI paddle collision — skipped when Ghost Ball is active */
+    if (!g->powerup.ghost_pending && g->ball.vx > 0 &&
         (int)g->ball.x >= ai_x - 1 && (int)g->ball.x <= ai_x &&
-        (int)g->ball.y >= g->ai.y && (int)g->ball.y < g->ai.y + PADDLE_HEIGHT)
+        (int)g->ball.y >= g->ai.y &&
+        (int)g->ball.y < g->ai.y + effective_ai_height)
     {
         g->ball.x = (float)(ai_x - 1);
         handle_paddle_hit(g, &g->ai, ai_x, -1);
+    }
+    /* Ghost Ball: clear flag once ball has passed the AI column */
+    if (g->powerup.ghost_pending && g->ball.vx > 0 &&
+        (int)g->ball.x > ai_x) {
+        g->powerup.ghost_pending = 0;
     }
 
     /* Scoring */
@@ -139,6 +155,52 @@ void game_update(GameState *g, float dt) {
         ball_serve(g, 1);
         if (g->player.score >= SCORE_TO_WIN) {
             g->running = 0;
+        }
+    }
+
+    /* Split ball physics */
+    if (g->split_active) {
+        g->split_ball.x += g->split_ball.vx * wdt;
+        g->split_ball.y += g->split_ball.vy * wdt;
+
+        if (g->split_ball.y < top_wall) {
+            g->split_ball.y  = top_wall + (top_wall - g->split_ball.y);
+            g->split_ball.vy = fabsf(g->split_ball.vy);
+        }
+        if (g->split_ball.y >= bottom_wall) {
+            g->split_ball.y  = bottom_wall - (g->split_ball.y - bottom_wall);
+            g->split_ball.vy = -fabsf(g->split_ball.vy);
+        }
+
+        /* Split ball paddle collisions (simple reflect, no angle change) */
+        if (g->split_ball.vx < 0 &&
+            (int)g->split_ball.x <= player_x + 1 &&
+            (int)g->split_ball.x >= player_x &&
+            (int)g->split_ball.y >= g->player.y &&
+            (int)g->split_ball.y < g->player.y + g->player_paddle_height)
+        {
+            g->split_ball.x  = (float)(player_x + 1);
+            g->split_ball.vx = -g->split_ball.vx;
+        }
+        if (g->split_ball.vx > 0 &&
+            (int)g->split_ball.x >= ai_x - 1 &&
+            (int)g->split_ball.x <= ai_x &&
+            (int)g->split_ball.y >= g->ai.y &&
+            (int)g->split_ball.y < g->ai.y + effective_ai_height)
+        {
+            g->split_ball.x  = (float)(ai_x - 1);
+            g->split_ball.vx = -g->split_ball.vx;
+        }
+
+        /* Split ball scoring */
+        if (g->split_ball.x < 0.5f) {
+            g->ai.score++;
+            g->split_active = 0;
+            if (g->ai.score >= SCORE_TO_WIN) g->running = 0;
+        } else if (g->split_ball.x >= (float)(g->cols - 1)) {
+            g->player.score++;
+            g->split_active = 0;
+            if (g->player.score >= SCORE_TO_WIN) g->running = 0;
         }
     }
 
