@@ -121,11 +121,10 @@ static void play_game(float paddle_speed) {
             g.paused = !g.paused;
         }
 
-        if (ch == ' ') {
-            powerup_activate(&g);
-        }
-
         if (!g.paused) {
+            if (ch == ' ') {
+                powerup_activate(&g);
+            }
             float move = paddle_speed * g.player_speed_mult * (float)dt;
             if (ch == KEY_UP   || ch == 'w' || ch == 'W' || ch == 'k' || ch == 'K')
                 player_y_f -= move;
