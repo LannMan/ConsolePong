@@ -42,6 +42,64 @@ void powerup_on_player_hit(struct GameState *g) {
         g->powerup.charge++;
 }
 
-/* activate and update stubs — will be filled in later tasks */
-void powerup_activate(struct GameState *g) { (void)g; }
+void powerup_activate(GameState *g) {
+    if (g->powerup.charge < PU_CHARGE_MAX) return;
+    if (g->powerup.active != PU_NONE) return;
+
+    PowerUpType t = g->powerup.queued;
+    g->powerup.active = t;
+    g->powerup.charge = 0;
+
+    switch (t) {
+        case PU_PADDLE_STRETCH:
+            g->player_paddle_height += 3;
+            g->powerup.active_timer = 6.0f;
+            break;
+        case PU_BALL_SLOW:
+            g->ball.vx   *= 0.5f;
+            g->ball.vy   *= 0.5f;
+            g->ball.speed *= 0.5f;
+            g->powerup.active_timer = 5.0f;
+            break;
+        case PU_CURVE_SHOT:
+            g->powerup.curve_pending = 1;
+            g->powerup.active_timer  = 15.0f;
+            break;
+        case PU_SPEED_BURST:
+            g->player_speed_mult    = 2.0f;
+            g->powerup.active_timer = 5.0f;
+            break;
+        case PU_BALL_SPLIT:
+            g->split_ball        = g->ball;
+            g->split_ball.vy     = -g->ball.vy;
+            g->split_active      = 1;
+            g->powerup.active_timer = 6.0f;
+            break;
+        case PU_AI_FREEZE:
+            g->ai_frozen            = 1;
+            g->powerup.active_timer = 3.0f;
+            break;
+        case PU_SHRINK_AI:
+            g->ai_paddle_shrunk     = 1;
+            g->powerup.active_timer = 6.0f;
+            break;
+        case PU_GHOST_BALL:
+            g->powerup.ghost_pending = 1;
+            g->powerup.active_timer  = 15.0f;
+            break;
+        case PU_TIME_WARP:
+            g->time_warp_factor     = 0.5f;
+            g->powerup.active_timer = 5.0f;
+            break;
+        case PU_MAGNET:
+            g->powerup.active_timer = 4.0f;
+            break;
+        default:
+            break;
+    }
+
+    g->powerup.queued = random_powerup();
+}
+
+/* update stub — will be filled in a later task */
 void powerup_update(struct GameState *g, float dt) { (void)g; (void)dt; }
