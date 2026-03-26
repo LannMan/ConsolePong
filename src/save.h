@@ -12,6 +12,12 @@ typedef struct {
     int    total_losses;
     int    loss_streak;
     int    best_loss_streak;
+    /* 0=Slow, 1=Normal, 2=Fast, 3=Blazing, 4=Ludicrous */
+    int    paddle_speed_idx;
+    /* 1 = player paddle size adapts to performance, 0 = fixed */
+    int    adaptive_paddle;
+    /* AI difficulty carried across matches (0.1 – 1.0) */
+    float  ai_difficulty;
     /* achievement IDs that are unlocked, terminated by -1 */
     int    achievements[MAX_ACH_SLOTS];
     /* unlock dates parallel to achievements[] */

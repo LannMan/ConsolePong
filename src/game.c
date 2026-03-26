@@ -16,9 +16,11 @@ void game_init(GameState *g, int rows, int cols) {
     g->rows = rows;
     g->cols = cols;
     g->running = 1;
-    g->ai_difficulty = 0.3f;
+    g->ai_difficulty = 0.1f;
     g->player.y  = (rows - PADDLE_HEIGHT) / 2;
     g->ai.y      = (rows - PADDLE_HEIGHT) / 2;
+    g->ai_y_f    = (float)g->ai.y;
+    g->player_paddle_height = PADDLE_HEIGHT;
     ball_serve(g, 1);  /* serve toward player first */
 }
 
@@ -27,6 +29,7 @@ void ball_serve(GameState *g, int toward_player) {
     g->ball.y = g->rows / 2.0f;
     g->rally_count = 0;
     g->wall_bounce_count = 0;
+    g->ai_rethink = 1;
     g->flag_rally_10 = 0;
     g->flag_rally_20 = 0;
     g->flag_bounce_5 = 0;
@@ -44,9 +47,10 @@ static void handle_paddle_hit(GameState *g, Paddle *paddle, int paddle_x, int di
     /* dir: -1 = ball going left (hit player), +1 = ball going right (hit AI) */
     (void)paddle_x;
 
-    /* Zone: where on paddle did the ball hit? -2..+2 */
-    float paddle_mid = paddle->y + PADDLE_HEIGHT / 2.0f;
-    float rel = (g->ball.y - paddle_mid) / (PADDLE_HEIGHT / 2.0f); /* -1..+1 */
+    /* Use the correct height for whichever paddle was hit */
+    int ph = (dir > 0) ? g->player_paddle_height : PADDLE_HEIGHT;  /* player hit=dir>0 */
+    float paddle_mid = paddle->y + ph / 2.0f;
+    float rel = (g->ball.y - paddle_mid) / (ph / 2.0f); /* -1..+1 */
     rel = clamp_f(rel, -1.0f, 1.0f);
 
     float angle = rel * (3.14159f / 4.0f); /* max ±45° */
@@ -61,6 +65,7 @@ static void handle_paddle_hit(GameState *g, Paddle *paddle, int paddle_x, int di
     g->ball.vx = cosf(angle) * g->ball.speed * (dir > 0 ? 1.0f : -1.0f);
     g->ball.vy = sinf(angle) * g->ball.speed;
 
+    g->ai_rethink = 1;
     g->rally_count++;
     if (g->rally_count >= 20) g->flag_rally_20 = 1;
     else if (g->rally_count >= 10) g->flag_rally_10 = 1;
@@ -81,12 +86,14 @@ void game_update(GameState *g, float dt) {
         g->ball.y  = top_wall + (top_wall - g->ball.y);
         g->ball.vy = fabsf(g->ball.vy);
         g->wall_bounce_count++;
+        g->cumulative_wall_bounces++;
         if (g->wall_bounce_count >= 5) g->flag_bounce_5 = 1;
     }
     if (g->ball.y >= bottom_wall) {
         g->ball.y  = bottom_wall - (g->ball.y - bottom_wall);
         g->ball.vy = -fabsf(g->ball.vy);
         g->wall_bounce_count++;
+        g->cumulative_wall_bounces++;
         if (g->wall_bounce_count >= 5) g->flag_bounce_5 = 1;
     }
 
@@ -96,7 +103,7 @@ void game_update(GameState *g, float dt) {
     /* Player paddle collision */
     if (g->ball.vx < 0 &&
         (int)g->ball.x <= player_x + 1 && (int)g->ball.x >= player_x &&
-        (int)g->ball.y >= g->player.y && (int)g->ball.y < g->player.y + PADDLE_HEIGHT)
+        (int)g->ball.y >= g->player.y && (int)g->ball.y < g->player.y + g->player_paddle_height)
     {
         g->ball.x = (float)(player_x + 1);
         handle_paddle_hit(g, &g->player, player_x, 1);

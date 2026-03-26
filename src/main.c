@@ -41,7 +41,44 @@ static Achievement  ach_list[ACH_COUNT];
 
 /* ─────────────── play loop ─────────────── */
 
-static void play_game(void) {
+static const float PADDLE_SPEEDS[] = { 30.0f, 50.0f, 75.0f, 105.0f, 145.0f };
+
+static int g_rainbow_mode = 0;
+
+static void show_help_screen(void) {
+    nodelay(stdscr, FALSE);
+    clear();
+    int rows, cols;
+    getmaxyx(stdscr, rows, cols);
+    int r = rows / 2 - 7;
+    int c = cols / 2 - 20;
+    attron(COLOR_PAIR(CP_TITLE) | A_BOLD);
+    mvprintw(r++, c, "  CONSOLEPONG HELP  ");
+    attroff(COLOR_PAIR(CP_TITLE) | A_BOLD);
+    r++;
+    attron(COLOR_PAIR(CP_SCORE));
+    mvprintw(r++, c, "Q: Move paddle expertly");
+    mvprintw(r++, c, "A: Also move paddle");
+    mvprintw(r++, c, "W/S or UP/DOWN: move paddle (actually works)");
+    r++;
+    mvprintw(r++, c, "Strategy tips:");
+    mvprintw(r++, c, "  1. Hit the ball back");
+    mvprintw(r++, c, "  2. Do not miss the ball");
+    mvprintw(r++, c, "  3. See tip 1");
+    r++;
+    mvprintw(r++, c, "Advanced technique:");
+    mvprintw(r++, c, "  Move the paddle to where the ball is going.");
+    mvprintw(r++, c, "  This is the entire game.");
+    r++;
+    attron(COLOR_PAIR(CP_BORDER));
+    mvprintw(r, c, "  Press any key to close this invaluable resource.");
+    attroff(COLOR_PAIR(CP_SCORE) | COLOR_PAIR(CP_BORDER));
+    refresh();
+    getch();
+    nodelay(stdscr, TRUE);
+}
+
+static void play_game(float paddle_speed) {
     int rows, cols;
     getmaxyx(stdscr, rows, cols);
     if (rows < 20) rows = 20;
@@ -49,6 +86,12 @@ static void play_game(void) {
 
     GameState g;
     game_init(&g, rows, cols);
+    g.ai_difficulty = save.ai_difficulty;  /* carry difficulty across matches */
+    g.rainbow_mode = g_rainbow_mode;
+    g_rainbow_mode = 0;
+
+    /* Float accumulator for player paddle — avoids truncation to 0 at 60fps */
+    float player_y_f = (float)g.player.y;
 
     double match_start = get_time_sec();
     double prev_time   = match_start;
@@ -78,17 +121,15 @@ static void play_game(void) {
         }
 
         if (!g.paused) {
-            int paddle_speed_cells = 18; /* cells/sec */
-            float move = (float)paddle_speed_cells * (float)dt;
-            if (ch == KEY_UP   || ch == 'w' || ch == 'W' || ch == 'k' || ch == 'K') {
-                g.player.y -= (int)(move + 0.5f);
-                if (g.player.y < 1) g.player.y = 1;
-            }
-            if (ch == KEY_DOWN || ch == 's' || ch == 'S' || ch == 'j' || ch == 'J') {
-                g.player.y += (int)(move + 0.5f);
-                if (g.player.y + PADDLE_HEIGHT > rows - 2)
-                    g.player.y = rows - 2 - PADDLE_HEIGHT;
-            }
+            float move = paddle_speed * (float)dt;
+            if (ch == KEY_UP   || ch == 'w' || ch == 'W' || ch == 'k' || ch == 'K')
+                player_y_f -= move;
+            if (ch == KEY_DOWN || ch == 's' || ch == 'S' || ch == 'j' || ch == 'J')
+                player_y_f += move;
+            if (player_y_f < 1.0f) player_y_f = 1.0f;
+            if (player_y_f + g.player_paddle_height > rows - 2)
+                player_y_f = (float)(rows - 2 - g.player_paddle_height);
+            g.player.y = (int)player_y_f;
         }
 
         int scored_before_update = (g.player.score != prev_player_score ||
@@ -102,6 +143,40 @@ static void play_game(void) {
             int player_just_scored = (g.player.score > prev_player_score);
             save.total_balls_returned++;
             ai_record_point(&g, player_just_scored);
+
+            /* Easter: rally of exactly 42 */
+            if (g.rally_count == 42) {
+                snprintf(g.banner_text, sizeof(g.banner_text), "Don't Panic!");
+                g.banner_frames = 180;
+            }
+            /* Easter: AI winning 7-0 */
+            if (!g.shown_7_banner && g.ai.score == 7 && g.player.score == 0) {
+                snprintf(g.banner_text, sizeof(g.banner_text),
+                         "The AI is not even trying anymore...");
+                g.banner_frames = 200;
+                g.shown_7_banner = 1;
+            }
+            /* Easter: 100 cumulative wall bounces in one match */
+            if (g.cumulative_wall_bounces == 100) {
+                snprintf(g.banner_text, sizeof(g.banner_text), "Pinball Wizard!");
+                g.banner_frames = 180;
+            }
+
+            /* Adaptive paddle size */
+            if (save.adaptive_paddle && g.last_10_count >= 3) {
+                int cnt = g.last_10_count < 10 ? g.last_10_count : 10;
+                int pw = 0;
+                for (int i = 0; i < cnt; i++) pw += (g.last_10[i] == 0);
+                float wr = (float)pw / (float)cnt;
+                if (wr > 0.6f && g.player_paddle_height > 2)
+                    g.player_paddle_height--;   /* winning → shrink */
+                else if (wr < 0.4f && g.player_paddle_height < 7)
+                    g.player_paddle_height++;   /* losing  → grow   */
+                /* re-clamp position in case paddle shrank under the ball */
+                if (player_y_f + g.player_paddle_height > rows - 2)
+                    player_y_f = (float)(rows - 2 - g.player_paddle_height);
+                g.player.y = (int)player_y_f;
+            }
 
             /* Achievement check mid-game */
             Achievement *new_ach[MAX_NEW_ACH];
@@ -147,6 +222,16 @@ static void play_game(void) {
             save.best_loss_streak = save.loss_streak;
     }
 
+    /* Adjust difficulty based on match outcome and persist it */
+    {
+        float d = g.ai_difficulty;
+        if (player_won) d += 0.15f;
+        else            d -= 0.10f;
+        if (d < 0.1f) d = 0.1f;
+        if (d > 1.0f) d = 1.0f;
+        save.ai_difficulty = d;
+    }
+
     if (ai_exceeded_50 == 0) {
         /* Keep difficulty low for Unbeatable check */
     } else {
@@ -155,6 +240,16 @@ static void play_game(void) {
     }
 
     double match_elapsed = get_time_sec() - match_start;
+
+    /* Easter: 3 AM */
+    {
+        time_t t = time(NULL);
+        struct tm *tm = localtime(&t);
+        if (tm->tm_hour == 3) {
+            snprintf(g.banner_text, sizeof(g.banner_text), "Seriously. Go to bed.");
+            g.banner_frames = 300;
+        }
+    }
 
     Achievement *new_ach[MAX_NEW_ACH];
     int n = achievement_check(ach_list, &g, &save,
@@ -165,7 +260,7 @@ static void play_game(void) {
     render_post_match(&g, new_ach, n, &choice);
     if (choice == 1) return;  /* back to menu */
     /* else play again: tail-recurse */
-    play_game();
+    play_game(paddle_speed);
 }
 
 /* ─────────────── main menu loop ─────────────── */
@@ -174,21 +269,74 @@ static void main_menu(void) {
     int sel = 0;
     nodelay(stdscr, FALSE);
 
+    static const int konami[8] = {
+        KEY_UP, KEY_UP, KEY_DOWN, KEY_DOWN,
+        KEY_LEFT, KEY_RIGHT, KEY_LEFT, KEY_RIGHT
+    };
+    int konami_idx = 0;
+    char word_buf[5] = {0};
+
     while (1) {
-        render_menu(sel);
+        render_menu(sel, save.paddle_speed_idx, save.adaptive_paddle);
         int ch = getch();
 
-        if (ch == KEY_UP   || ch == 'w' || ch == 'W') { if (sel > 0) sel--; }
-        if (ch == KEY_DOWN || ch == 's' || ch == 'S') { if (sel < 2) sel++; }
+        /* Konami code */
+        if (ch == konami[konami_idx]) {
+            konami_idx++;
+            if (konami_idx == 8) {
+                g_rainbow_mode = 1;
+                konami_idx = 0;
+                attron(COLOR_PAIR(CP_BANNER) | A_BOLD);
+                int rows2, cols2; getmaxyx(stdscr, rows2, cols2);
+                mvprintw(rows2 / 2, cols2 / 2 - 8, "  RAINBOW MODE ON!  ");
+                attroff(COLOR_PAIR(CP_BANNER) | A_BOLD);
+                refresh();
+                sleep_ms(900);
+            }
+        } else {
+            konami_idx = (ch == konami[0]) ? 1 : 0;
+        }
 
-        if (ch == '\n' || ch == '\r' || ch == ' ') {
+        /* HELP typed */
+        if (ch >= 'a' && ch <= 'z') {
+            memmove(word_buf, word_buf + 1, 3);
+            word_buf[3] = (char)ch;
+            word_buf[4] = '\0';
+            if (strcmp(word_buf, "help") == 0) {
+                show_help_screen();
+                memset(word_buf, 0, sizeof(word_buf));
+            }
+        }
+
+        if (ch == KEY_UP   || ch == 'w' || ch == 'W') { if (sel > 0) sel--; }
+        if (ch == KEY_DOWN || ch == 's' || ch == 'S') { if (sel < 4) sel++; }
+
+        if (sel == 2) {
+            /* Paddle Speed: Left/Right or Enter to cycle */
+            if (ch == KEY_LEFT  || ch == 'a' || ch == 'A') {
+                if (save.paddle_speed_idx > 0) { save.paddle_speed_idx--; save_write(&save); }
+            }
+            if (ch == KEY_RIGHT || ch == 'd' || ch == 'D' ||
+                ch == '\n' || ch == '\r' || ch == ' ') {
+                save.paddle_speed_idx = (save.paddle_speed_idx + 1) % 5;
+                save_write(&save);
+            }
+        } else if (sel == 3) {
+            /* Adaptive Paddle: any directional key or Enter toggles */
+            if (ch == KEY_LEFT  || ch == 'a' || ch == 'A' ||
+                ch == KEY_RIGHT || ch == 'd' || ch == 'D' ||
+                ch == '\n' || ch == '\r' || ch == ' ') {
+                save.adaptive_paddle = !save.adaptive_paddle;
+                save_write(&save);
+            }
+        } else if (ch == '\n' || ch == '\r' || ch == ' ') {
             if (sel == 0) {
                 nodelay(stdscr, TRUE);
-                play_game();
+                play_game(PADDLE_SPEEDS[save.paddle_speed_idx]);
                 nodelay(stdscr, FALSE);
             } else if (sel == 1) {
                 render_achievements(ach_list);
-            } else {
+            } else if (sel == 4) {
                 break;
             }
         }

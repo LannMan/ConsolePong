@@ -36,6 +36,7 @@ static void get_tmp_path(char *buf, int buflen) {
 void save_defaults(SaveData *s) {
     memset(s, 0, sizeof(*s));
     memset(s->achievements, -1, sizeof(s->achievements));
+    s->ai_difficulty = 0.1f;
 }
 
 int save_has_achievement(const SaveData *s, int id) {
@@ -87,6 +88,9 @@ int save_load(SaveData *s) {
         else if (strcmp(key, "total_losses")        == 0) s->total_losses        = atoi(val);
         else if (strcmp(key, "loss_streak")         == 0) s->loss_streak         = atoi(val);
         else if (strcmp(key, "best_loss_streak")    == 0) s->best_loss_streak    = atoi(val);
+        else if (strcmp(key, "paddle_speed_idx")    == 0) s->paddle_speed_idx    = atoi(val);
+        else if (strcmp(key, "adaptive_paddle")     == 0) s->adaptive_paddle     = atoi(val);
+        else if (strcmp(key, "ai_difficulty")       == 0) s->ai_difficulty       = (float)atof(val);
         else if (strcmp(key, "achievements")        == 0) {
             /* Parse comma-separated IDs, optional :YYYY-MM-DD suffix */
             int ach_idx = 0;
@@ -124,6 +128,9 @@ int save_write(SaveData *s) {
     fprintf(f, "total_losses=%d\n",         s->total_losses);
     fprintf(f, "loss_streak=%d\n",          s->loss_streak);
     fprintf(f, "best_loss_streak=%d\n",     s->best_loss_streak);
+    fprintf(f, "paddle_speed_idx=%d\n",     s->paddle_speed_idx);
+    fprintf(f, "adaptive_paddle=%d\n",      s->adaptive_paddle);
+    fprintf(f, "ai_difficulty=%.4f\n",      s->ai_difficulty);
 
     /* achievements as id:date,id:date,... */
     fprintf(f, "achievements=");
