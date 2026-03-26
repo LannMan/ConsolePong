@@ -101,5 +101,71 @@ void powerup_activate(GameState *g) {
     g->powerup.queued = random_powerup();
 }
 
-/* update stub — will be filled in a later task */
-void powerup_update(struct GameState *g, float dt) { (void)g; (void)dt; }
+void powerup_update(GameState *g, float dt) {
+    if (g->powerup.active == PU_NONE) return;
+
+    /* Per-frame effects */
+    if (g->powerup.active == PU_MAGNET) {
+        float paddle_mid = (float)g->player.y + g->player_paddle_height / 2.0f;
+        float diff = paddle_mid - g->ball.y;
+        float nudge = 2.0f * dt;
+        if (diff > 0.0f)       g->ball.vy -= nudge;
+        else if (diff < 0.0f)  g->ball.vy += nudge;
+    }
+
+    /* Curve Shot: expires when curve_pending is consumed in handle_paddle_hit */
+    if (g->powerup.active == PU_CURVE_SHOT && !g->powerup.curve_pending) {
+        g->powerup.active = PU_NONE;
+        return;
+    }
+
+    /* Ghost Ball: expires when ghost_pending is consumed in game_update */
+    if (g->powerup.active == PU_GHOST_BALL && !g->powerup.ghost_pending) {
+        g->powerup.active = PU_NONE;
+        return;
+    }
+
+    g->powerup.active_timer -= dt;
+    if (g->powerup.active_timer > 0.0f) return;
+
+    /* On expiry: reverse effects */
+    switch (g->powerup.active) {
+        case PU_PADDLE_STRETCH:
+            g->player_paddle_height -= 3;
+            if (g->player_paddle_height < PADDLE_HEIGHT)
+                g->player_paddle_height = PADDLE_HEIGHT;
+            break;
+        case PU_BALL_SLOW:
+            g->ball.vx    *= 2.0f;
+            g->ball.vy    *= 2.0f;
+            g->ball.speed *= 2.0f;
+            break;
+        case PU_CURVE_SHOT:
+            g->powerup.curve_pending = 0;
+            break;
+        case PU_SPEED_BURST:
+            g->player_speed_mult = 1.0f;
+            break;
+        case PU_BALL_SPLIT:
+            g->split_active = 0;
+            break;
+        case PU_AI_FREEZE:
+            g->ai_frozen = 0;
+            break;
+        case PU_SHRINK_AI:
+            g->ai_paddle_shrunk = 0;
+            break;
+        case PU_GHOST_BALL:
+            g->powerup.ghost_pending = 0;
+            break;
+        case PU_TIME_WARP:
+            g->time_warp_factor = 1.0f;
+            break;
+        case PU_MAGNET:
+            break; /* no state to reverse */
+        default:
+            break;
+    }
+
+    g->powerup.active = PU_NONE;
+}
