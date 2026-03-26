@@ -14,8 +14,11 @@ TARGET  = pong
 UNAME := $(shell uname 2>/dev/null || echo Windows)
 
 ifneq (,$(findstring MINGW,$(UNAME)))
-    # MSYS2/MinGW on Windows — static link so the .exe runs without extra DLLs
-    LIBS    = -static -lpdcurses
+    # MSYS2/MinGW on Windows:
+    # Statically link PDCurses so the .exe doesn't need libpdcurses.dll at runtime.
+    # gdi32/comdlg32/winmm are PDCurses WinGUI dependencies — always present on Windows.
+    # -static-libgcc bakes in libgcc so the .exe needs no extra MinGW DLLs.
+    LIBS    = -Wl,-Bstatic -lpdcurses -Wl,-Bdynamic -lgdi32 -lcomdlg32 -lwinmm -static-libgcc
     TARGET  = pong.exe
 else ifeq ($(UNAME), Darwin)
     # macOS: use system ncurses (ships with Xcode CLT)
