@@ -6,7 +6,8 @@ SRCS    = $(SRC_DIR)/main.c \
           $(SRC_DIR)/ai.c \
           $(SRC_DIR)/render.c \
           $(SRC_DIR)/achievements.c \
-          $(SRC_DIR)/save.c
+          $(SRC_DIR)/save.c \
+          $(SRC_DIR)/powerup.c
 TARGET  = pong
 
 # Platform detection
