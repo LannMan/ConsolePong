@@ -71,12 +71,15 @@ void render_game(const GameState *g) {
     }
     attroff(COLOR_PAIR(CP_PLAYER) | A_BOLD);
 
-    /* AI paddle (right) */
-    attron(COLOR_PAIR(CP_AI) | A_BOLD);
-    for (int i = 0; i < PADDLE_HEIGHT; i++) {
-        mvaddch(g->ai.y + i, cols - 3, ACS_BLOCK);
+    /* AI paddle (right) — respects Shrink AI power-up */
+    {
+        int render_ai_h = PADDLE_HEIGHT - (g->ai_paddle_shrunk ? 2 : 0);
+        attron(COLOR_PAIR(CP_AI) | A_BOLD);
+        for (int i = 0; i < render_ai_h; i++) {
+            mvaddch(g->ai.y + i, cols - 3, ACS_BLOCK);
+        }
+        attroff(COLOR_PAIR(CP_AI) | A_BOLD);
     }
-    attroff(COLOR_PAIR(CP_AI) | A_BOLD);
 
     /* Ball */
     int bx = (int)g->ball.x;

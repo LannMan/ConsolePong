@@ -28,6 +28,7 @@ typedef struct {
     float       active_timer;  /* seconds remaining for active effect */
     int         curve_pending; /* Curve Shot: 1 until next player paddle hit */
     int         ghost_pending; /* Ghost Ball: 1 until ball passes AI column */
+    float       saved_ball_speed; /* Ball Slow: stores pre-activation speed */
 } PowerUpState;
 
 struct GameState;  /* Forward declaration */
