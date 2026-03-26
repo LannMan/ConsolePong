@@ -24,8 +24,9 @@ else ifeq ($(UNAME), Darwin)
     # macOS: use system ncurses (ships with Xcode CLT)
     LIBS    = -lncurses -lm
 else
-    # Linux: ncurses + math library
-    LIBS    = -lncurses -lm
+    # Linux: use ncursesw (wide-char ncurses) — universally available across distros
+    # (Arch ships only libncursesw.so.6; Ubuntu ships both but also has libncursesw.so.6)
+    LIBS    = -lncursesw -lm
 endif
 
 all: $(TARGET)
