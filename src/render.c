@@ -1,4 +1,5 @@
 #include "render.h"
+#include "powerup.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -32,7 +33,7 @@ void render_cleanup(void) {
 /* ───────────── game screen ───────────── */
 
 void render_game(const GameState *g) {
-    clear();
+    erase();
 
     int rows = g->rows;
     int cols = g->cols;
@@ -63,9 +64,9 @@ void render_game(const GameState *g) {
     mvprintw(0, cols / 2 - 6, " %2d  :  %2d ", g->player.score, g->ai.score);
     attroff(COLOR_PAIR(CP_SCORE) | A_BOLD);
 
-    /* Player paddle (left) */
+    /* Player paddle (left) — height is dynamic when adaptive mode is on */
     attron(COLOR_PAIR(CP_PLAYER) | A_BOLD);
-    for (int i = 0; i < PADDLE_HEIGHT; i++) {
+    for (int i = 0; i < g->player_paddle_height; i++) {
         mvaddch(g->player.y + i, 2, ACS_BLOCK);
     }
     attroff(COLOR_PAIR(CP_PLAYER) | A_BOLD);
@@ -81,27 +82,79 @@ void render_game(const GameState *g) {
     int bx = (int)g->ball.x;
     int by = (int)g->ball.y;
     if (bx > 0 && bx < cols - 1 && by > 0 && by < rows - 1) {
-        attron(COLOR_PAIR(CP_BALL) | A_BOLD);
-        mvaddch(by, bx, 'O');
-        attroff(COLOR_PAIR(CP_BALL) | A_BOLD);
+        int ball_cp = CP_BALL;
+        char ball_ch = 'O';
+        if (g->rainbow_mode) {
+            int cyc = (int)(g->match_elapsed * 5.0) % 5;
+            int pairs[] = { CP_BALL, CP_PLAYER, CP_AI, CP_WIN, CP_GOLD };
+            ball_cp = pairs[cyc];
+            ball_ch = "*+O@#"[cyc];
+        }
+        attron(COLOR_PAIR(ball_cp) | A_BOLD);
+        mvaddch(by, bx, ball_ch);
+        attroff(COLOR_PAIR(ball_cp) | A_BOLD);
     }
 
-    /* Difficulty bar */
-    attron(COLOR_PAIR(CP_SCORE));
-    int bar_len = (int)(g->ai_difficulty * 10.0f);
-    mvprintw(rows - 1, 2, "AI:");
-    for (int i = 0; i < 10; i++) {
-        if (i < bar_len) {
-            attron(COLOR_PAIR(CP_AI));
-            mvaddch(rows - 1, 5 + i, ACS_BLOCK);
-            attroff(COLOR_PAIR(CP_AI));
-        } else {
-            attron(COLOR_PAIR(CP_BORDER));
-            mvaddch(rows - 1, 5 + i, ACS_CKBOARD);
-            attroff(COLOR_PAIR(CP_BORDER));
+    /* Split ball */
+    if (g->split_active) {
+        int sbx = (int)g->split_ball.x;
+        int sby = (int)g->split_ball.y;
+        if (sbx > 0 && sbx < cols - 1 && sby > 0 && sby < rows - 1) {
+            attron(COLOR_PAIR(CP_BALL) | A_BOLD);
+            mvaddch(sby, sbx, '*');
+            attroff(COLOR_PAIR(CP_BALL) | A_BOLD);
         }
     }
-    attroff(COLOR_PAIR(CP_SCORE));
+
+    /* Difficulty label */
+    {
+        float d = g->ai_difficulty;
+        const char *label;
+        int label_cp;
+        if      (d < 0.30f) { label = "EASY";   label_cp = CP_WIN;    }
+        else if (d < 0.55f) { label = "MEDIUM";  label_cp = CP_GOLD;   }
+        else if (d < 0.80f) { label = "HARD";    label_cp = CP_BALL;   }
+        else                { label = "EXPERT";  label_cp = CP_AI;     }
+        int pct = (int)(d * 100.0f);
+        attron(COLOR_PAIR(CP_SCORE));
+        mvprintw(rows - 1, 2, "AI:");
+        attroff(COLOR_PAIR(CP_SCORE));
+        attron(COLOR_PAIR(label_cp) | A_BOLD);
+        mvprintw(rows - 1, 6, "%-6s", label);
+        attroff(COLOR_PAIR(label_cp) | A_BOLD);
+        attron(COLOR_PAIR(CP_BORDER));
+        mvprintw(rows - 1, 13, "%3d%%", pct);
+        attroff(COLOR_PAIR(CP_BORDER));
+    }
+
+    /* Power-up HUD — centred on bottom border row */
+    {
+        const PowerUpState *pu = &g->powerup;
+        int hud_col = cols / 2 - 17;
+        if (hud_col < 1) hud_col = 1;
+
+        if (pu->active != PU_NONE) {
+            attron(COLOR_PAIR(CP_BANNER) | A_BOLD);
+            mvprintw(rows - 1, hud_col, "ACTIVE:%-14s %4.1fs",
+                     powerup_name(pu->active),
+                     pu->active_timer > 0.0f ? pu->active_timer : 0.0f);
+            attroff(COLOR_PAIR(CP_BANNER) | A_BOLD);
+        } else {
+            attron(COLOR_PAIR(CP_GOLD));
+            mvprintw(rows - 1, hud_col, "PWR:%-14s [", powerup_name(pu->queued));
+            attroff(COLOR_PAIR(CP_GOLD));
+            attron(COLOR_PAIR(CP_PLAYER) | A_BOLD);
+            for (int i = 0; i < PU_CHARGE_MAX; i++)
+                addch(i < pu->charge ? '|' : ' ');
+            attroff(COLOR_PAIR(CP_PLAYER) | A_BOLD);
+            attron(COLOR_PAIR(CP_GOLD));
+            if (pu->charge >= PU_CHARGE_MAX)
+                addstr("] SPACE!");
+            else
+                addstr("]");
+            attroff(COLOR_PAIR(CP_GOLD));
+        }
+    }
 
     /* Controls hint */
     attron(COLOR_PAIR(CP_SCORE));
@@ -134,10 +187,10 @@ void render_game(const GameState *g) {
 
 /* ───────────── main menu ───────────── */
 
-static const char *MENU_ITEMS[] = { "Play", "Achievements", "Quit" };
-#define MENU_COUNT 3
+static const char *SPEED_LABELS[] = { "Slow", "Normal", "Fast", "Blazing", "Ludicrous" };
+#define MENU_COUNT 5
 
-void render_menu(int selected) {
+void render_menu(int selected, int speed_idx, int adaptive_paddle) {
     clear();
     int rows, cols;
     getmaxyx(stdscr, rows, cols);
@@ -154,25 +207,36 @@ void render_menu(int selected) {
     mvprintw(rows / 2 - 3, cols / 2 - (int)strlen(sub) / 2, "%s", sub);
     attroff(COLOR_PAIR(CP_SCORE));
 
-    /* Menu items */
+    /* Menu items: Play, Achievements, Paddle Speed, Adaptive Paddle, Quit */
+    const char *labels[MENU_COUNT] = {
+        "Play", "Achievements", "Paddle Speed", "Adaptive Paddle", "Quit"
+    };
+    int base_r = rows / 2;
+    int base_c = cols / 2 - 12;
+
     for (int i = 0; i < MENU_COUNT; i++) {
-        int r = rows / 2 + i;
-        int c = cols / 2 - 7;
-        if (i == selected) {
-            attron(COLOR_PAIR(CP_PLAYER) | A_BOLD | A_REVERSE);
-            mvprintw(r, c, "  %-13s", MENU_ITEMS[i]);
-            attroff(COLOR_PAIR(CP_PLAYER) | A_BOLD | A_REVERSE);
+        int r = base_r + i;
+        int active = (i == selected);
+        if (active) attron(COLOR_PAIR(CP_PLAYER) | A_BOLD | A_REVERSE);
+        else        attron(COLOR_PAIR(CP_SCORE));
+
+        if (i == 2) {
+            mvprintw(r, base_c, "  %-16s< %-9s>", labels[i], SPEED_LABELS[speed_idx]);
+        } else if (i == 3) {
+            mvprintw(r, base_c, "  %-16s< %-9s>", labels[i],
+                     adaptive_paddle ? "ON " : "OFF");
         } else {
-            attron(COLOR_PAIR(CP_SCORE));
-            mvprintw(r, c, "  %-13s", MENU_ITEMS[i]);
-            attroff(COLOR_PAIR(CP_SCORE));
+            mvprintw(r, base_c, "  %-26s", labels[i]);
         }
+
+        if (active) attroff(COLOR_PAIR(CP_PLAYER) | A_BOLD | A_REVERSE);
+        else        attroff(COLOR_PAIR(CP_SCORE));
     }
 
     attron(COLOR_PAIR(CP_BORDER));
     mvprintw(rows / 2 + MENU_COUNT + 1,
-             cols / 2 - 12,
-             "UP/DOWN to select, ENTER to confirm");
+             cols / 2 - 20,
+             "UP/DOWN: navigate   LEFT/RIGHT or ENTER: change setting");
     attroff(COLOR_PAIR(CP_BORDER));
 
     refresh();
