@@ -17,6 +17,9 @@ Icon
 .VolumeIcon.icns
 .com.apple.timemachine.donotpresent
 
+### Design documents
+docs/
+
 ### Build outputs
 pong
 pong.exe
