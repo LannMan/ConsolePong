@@ -32,6 +32,7 @@
 #include "render.h"
 #include "achievements.h"
 #include "save.h"
+#include "powerup.h"
 
 #define FRAME_MS    16     /* ~60fps */
 #define MAX_NEW_ACH  8
@@ -120,8 +121,12 @@ static void play_game(float paddle_speed) {
             g.paused = !g.paused;
         }
 
+        if (ch == ' ') {
+            powerup_activate(&g);
+        }
+
         if (!g.paused) {
-            float move = paddle_speed * (float)dt;
+            float move = paddle_speed * g.player_speed_mult * (float)dt;
             if (ch == KEY_UP   || ch == 'w' || ch == 'W' || ch == 'k' || ch == 'K')
                 player_y_f -= move;
             if (ch == KEY_DOWN || ch == 's' || ch == 'S' || ch == 'j' || ch == 'J')
@@ -137,6 +142,7 @@ static void play_game(float paddle_speed) {
 
         game_update(&g, (float)dt);
         ai_update(&g, (float)dt);
+        powerup_update(&g, (float)dt);
 
         /* Detect a point just scored */
         if (g.player.score != prev_player_score || g.ai.score != prev_ai_score) {
