@@ -148,7 +148,10 @@ static void play_game(float paddle_speed) {
         if (g.player.score != prev_player_score || g.ai.score != prev_ai_score) {
             int player_just_scored = (g.player.score > prev_player_score);
             save.total_balls_returned++;
+            float old_difficulty = g.ai_difficulty;
             ai_record_point(&g, player_just_scored);
+            if (g.ai_difficulty != old_difficulty)
+                g.diff_flash_frames = 45;
 
             /* Easter: rally of exactly 42 */
             if (g.rally_count == 42) {
@@ -169,15 +172,19 @@ static void play_game(float paddle_speed) {
             }
 
             /* Adaptive paddle size */
-            if (save.adaptive_paddle && g.last_10_count >= 3) {
+            if (save.adaptive_paddle && g.last_10_count >= 1) {
                 int cnt = g.last_10_count < 10 ? g.last_10_count : 10;
                 int pw = 0;
                 for (int i = 0; i < cnt; i++) pw += (g.last_10[i] == 0);
                 float wr = (float)pw / (float)cnt;
-                if (wr > 0.6f && g.player_paddle_height > 2)
+                int old_paddle_height = g.player_paddle_height;
+                /* Only shrink on a point the player just won; only grow on a miss */
+                if (player_just_scored && wr > 0.55f && g.player_paddle_height > 2)
                     g.player_paddle_height--;   /* winning → shrink */
-                else if (wr < 0.4f && g.player_paddle_height < 7)
+                else if (!player_just_scored && wr < 0.45f && g.player_paddle_height < 7)
                     g.player_paddle_height++;   /* losing  → grow   */
+                if (g.player_paddle_height != old_paddle_height)
+                    g.paddle_flash_frames = 45;
                 /* re-clamp position in case paddle shrank under the ball */
                 if (player_y_f + g.player_paddle_height > rows - 2)
                     player_y_f = (float)(rows - 2 - g.player_paddle_height);

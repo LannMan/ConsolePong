@@ -8,11 +8,11 @@ void ai_record_point(GameState *g, int player_scored) {
     if (g->last_10_count < 10) g->last_10_count++;
 
     /* Recalculate difficulty */
-    g->ai_difficulty = ai_calc_difficulty(g);
+    g->ai_difficulty = ai_calc_difficulty(g, player_scored);
 }
 
-float ai_calc_difficulty(GameState *g) {
-    if (g->last_10_count < 3) return g->ai_difficulty; /* not enough data yet */
+float ai_calc_difficulty(GameState *g, int player_scored) {
+    if (g->last_10_count < 1) return g->ai_difficulty; /* not enough data yet */
 
     int count = g->last_10_count < 10 ? g->last_10_count : 10;
     int player_wins = 0;
@@ -22,8 +22,12 @@ float ai_calc_difficulty(GameState *g) {
 
     float win_rate = (float)player_wins / (float)count;
     float diff = g->ai_difficulty;
-    if (win_rate > 0.6f)      diff += 0.05f;  /* player winning too much */
-    else if (win_rate < 0.4f) diff -= 0.05f;  /* player losing too much */
+    /* Only increase difficulty on a point the player just won (never punish a miss).
+       Only decrease difficulty on a point the AI just won. */
+    if (player_scored && win_rate > 0.55f)
+        diff += 0.05f;
+    else if (!player_scored && win_rate < 0.45f)
+        diff -= 0.05f;
 
     if (diff < 0.1f) diff = 0.1f;
     if (diff > 1.0f) diff = 1.0f;

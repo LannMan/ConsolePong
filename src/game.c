@@ -206,4 +206,6 @@ void game_update(GameState *g, float dt) {
 
     /* Banner countdown */
     if (g->banner_frames > 0) g->banner_frames--;
+    if (g->diff_flash_frames > 0)   g->diff_flash_frames--;
+    if (g->paddle_flash_frames > 0) g->paddle_flash_frames--;
 }

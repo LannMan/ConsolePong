@@ -14,8 +14,8 @@ TARGET  = pong
 UNAME := $(shell uname 2>/dev/null || echo Windows)
 
 ifneq (,$(findstring MINGW,$(UNAME)))
-    # MSYS2/MinGW on Windows
-    LIBS    = -lpdcurses
+    # MSYS2/MinGW on Windows — static link so the .exe runs without extra DLLs
+    LIBS    = -static -lpdcurses
     TARGET  = pong.exe
 else ifeq ($(UNAME), Darwin)
     # macOS: use system ncurses (ships with Xcode CLT)

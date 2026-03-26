@@ -154,10 +154,10 @@ Windows requires [PDCurses](https://pdcurses.org/) and [MSYS2](https://www.msys2
 
 Download and run the installer from https://www.msys2.org/. Open the **MSYS2 MinGW64** shell (not the plain MSYS2 shell).
 
-**Step 2 — Install the toolchain and PDCurses**
+**Step 2 — Install the toolchain, git, and PDCurses**
 ```bash
 pacman -Syu
-pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-make mingw-w64-x86_64-pdcurses
+pacman -S git mingw-w64-x86_64-gcc mingw-w64-x86_64-make mingw-w64-x86_64-pdcurses
 ```
 
 **Step 3 — Build**
@@ -174,7 +174,7 @@ The Makefile detects Windows via `uname` returning something other than `Darwin`
 ./pong.exe
 ```
 
-> **Note:** Run inside the MSYS2 MinGW64 terminal or a Windows Terminal configured to use it. PDCurses requires a Windows console with at least 80×24 characters.
+> **Note:** The binary is statically linked and runs standalone — no MSYS2 shell or extra DLLs required. You can double-click `pong.exe` from Explorer or run it in any Windows terminal (cmd, PowerShell, Windows Terminal). PDCurses requires a console of at least 80×24 characters.
 
 > **Windows Defender:** On first launch, Windows may show a SmartScreen warning because the binary is unsigned. Click "More info" → "Run anyway", or right-click the `.exe` and choose Properties → Unblock.
 

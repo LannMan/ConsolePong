@@ -8,6 +8,6 @@
 
 void  ai_update(GameState *g, float dt);
 void  ai_record_point(GameState *g, int player_scored);
-float ai_calc_difficulty(GameState *g);
+float ai_calc_difficulty(GameState *g, int player_scored);
 
 #endif /* AI_H */

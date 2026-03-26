@@ -68,6 +68,10 @@ typedef struct GameState {
     int     banner_frames;  /* >0 = show banner this many frames */
     char    banner_text[64];
 
+    /* Visual flash feedback when adaptive stats change */
+    int     diff_flash_frames;   /* >0 while AI-difficulty display should flash */
+    int     paddle_flash_frames; /* >0 while player paddle should flash */
+
     /* Board dimensions (set from terminal size) */
     int     rows, cols;
 

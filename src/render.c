@@ -65,11 +65,14 @@ void render_game(const GameState *g) {
     attroff(COLOR_PAIR(CP_SCORE) | A_BOLD);
 
     /* Player paddle (left) — height is dynamic when adaptive mode is on */
-    attron(COLOR_PAIR(CP_PLAYER) | A_BOLD);
-    for (int i = 0; i < g->player_paddle_height; i++) {
-        mvaddch(g->player.y + i, 2, ACS_BLOCK);
+    {
+        int pflash = g->paddle_flash_frames > 0;
+        attron(COLOR_PAIR(CP_PLAYER) | A_BOLD | (pflash ? A_REVERSE : 0));
+        for (int i = 0; i < g->player_paddle_height; i++) {
+            mvaddch(g->player.y + i, 2, ACS_BLOCK);
+        }
+        attroff(COLOR_PAIR(CP_PLAYER) | A_BOLD | (pflash ? A_REVERSE : 0));
     }
-    attroff(COLOR_PAIR(CP_PLAYER) | A_BOLD);
 
     /* AI paddle (right) — respects Shrink AI power-up */
     {
@@ -119,15 +122,16 @@ void render_game(const GameState *g) {
         else if (d < 0.80f) { label = "HARD";    label_cp = CP_BALL;   }
         else                { label = "EXPERT";  label_cp = CP_AI;     }
         int pct = (int)(d * 100.0f);
+        int flash = g->diff_flash_frames > 0;
         attron(COLOR_PAIR(CP_SCORE));
         mvprintw(rows - 1, 2, "AI:");
         attroff(COLOR_PAIR(CP_SCORE));
-        attron(COLOR_PAIR(label_cp) | A_BOLD);
+        attron(COLOR_PAIR(label_cp) | A_BOLD | (flash ? A_REVERSE : 0));
         mvprintw(rows - 1, 6, "%-6s", label);
-        attroff(COLOR_PAIR(label_cp) | A_BOLD);
-        attron(COLOR_PAIR(CP_BORDER));
+        attroff(COLOR_PAIR(label_cp) | A_BOLD | (flash ? A_REVERSE : 0));
+        attron(COLOR_PAIR(CP_BORDER) | (flash ? A_REVERSE : 0));
         mvprintw(rows - 1, 13, "%3d%%", pct);
-        attroff(COLOR_PAIR(CP_BORDER));
+        attroff(COLOR_PAIR(CP_BORDER) | (flash ? A_REVERSE : 0));
     }
 
     /* Power-up HUD — centred on bottom border row */
