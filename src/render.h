@@ -27,7 +27,8 @@ void render_init(void);
 void render_cleanup(void);
 
 void render_game(const GameState *g);
-void render_menu(int selected);  /* selected: 0=Play, 1=Achievements, 2=Quit */
+/* selected: 0=Play, 1=Achievements, 2=Speed, 3=Adaptive Paddle, 4=Quit */
+void render_menu(int selected, int speed_idx, int adaptive_paddle);
 void render_achievements(Achievement list[ACH_COUNT]);
 void render_post_match(const GameState *g,
                        Achievement *newly_unlocked[],
