@@ -19,9 +19,10 @@ ifneq (,$(findstring MINGW,$(UNAME)))
     TARGET  = pong.exe
 else ifeq ($(UNAME), Darwin)
     # macOS: use system ncurses (ships with Xcode CLT)
-    LIBS    = -lncurses
+    LIBS    = -lncurses -lm
 else
-    LIBS    = -lncurses
+    # Linux: ncurses + math library
+    LIBS    = -lncurses -lm
 endif
 
 all: $(TARGET)
