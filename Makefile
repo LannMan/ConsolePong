@@ -13,7 +13,8 @@ TARGET  = pong
 # Platform detection
 UNAME := $(shell uname 2>/dev/null || echo Windows)
 
-ifeq ($(UNAME), Windows)
+ifneq (,$(findstring MINGW,$(UNAME)))
+    # MSYS2/MinGW on Windows
     LIBS    = -lpdcurses
     TARGET  = pong.exe
 else ifeq ($(UNAME), Darwin)
