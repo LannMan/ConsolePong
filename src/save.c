@@ -99,9 +99,10 @@ int save_load(SaveData *s) {
                 char date_buf[11] = "";
                 int id = atoi(tok);
                 char *colon = strchr(tok, ':');
-                if (colon) strncpy(date_buf, colon + 1, 10);
+                if (colon) { strncpy(date_buf, colon + 1, 10); date_buf[10] = '\0'; }
                 s->achievements[ach_idx] = id;
                 strncpy(s->unlock_dates[ach_idx], date_buf, 10);
+                s->unlock_dates[ach_idx][10] = '\0';
                 ach_idx++;
                 tok = strtok(NULL, ",");
             }
